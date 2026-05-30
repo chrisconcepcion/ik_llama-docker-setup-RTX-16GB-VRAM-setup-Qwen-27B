@@ -1,0 +1,78 @@
+services:
+  ik_llama:
+    build:
+      context: .
+      dockerfile: Dockerfile.cuda
+    image: ik_llama:cuda-12.8
+    container_name: ik_llama_server
+    ipc: host
+    shm_size: '16gb'
+    ports:
+      - "54321:54321"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    environment:
+      - NVIDIA_DISABLE_REQUIRE=1
+      - LLAMA_DEBUG=1
+      - GGML_CUDA_DISABLE_GRAPHS=1
+    volumes:
+      # Mount the local models folder into the container
+      - ../models:/models
+      # Mount the chat template directly into the working directory
+      - ./chat_template.jinja:/app/chat_template.jinja
+    command:
+      - "--model"
+      - "/models/Qwen3.6-27B.i1-IQ4_KS-attn_qkv-IQ4_KSS.gguf"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "54321"
+      - "--ctx-size"
+      - "110000"
+      - "--ctx-checkpoints"
+      - "0"
+      - "--chat-template-file"
+      - "chat_template.jinja"
+      - "--n-gpu-layers"
+      - "99"
+      - "--cache-type-k"
+      - "q4_0"
+      - "--cache-type-v"
+      - "q4_0"
+      - "-b"
+      - "512"
+      - "-ub"
+      - "256"
+      - "-fa"
+      - "on"
+      - "--no-mmap"
+      - "--reasoning"
+      - "on"
+      - "--reasoning-format"
+      - "deepseek"
+      - "-t"
+      - "8"
+      - "--parallel"
+      - "1"
+      - "-khad"
+      - "-vhad"
+      - "--chat-template-kwargs"
+      - '{"preserve_thinking": true}'
+      - "--jinja"
+      - "--cont-batching"
+      - "--temp"
+      - "0.15"
+      - "--top-k"
+      - "1"
+      - "--min-p"
+      - "0.1"
+      - "--repeat-last-n"
+      - "512"
+      - "--repeat-penalty"
+      - "1.05"
+    restart: unless-stopped

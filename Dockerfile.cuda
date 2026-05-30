@@ -1,0 +1,72 @@
+# Stage 1: Build
+FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu24.04 AS build
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build-essential, cmake, git, curl, and libcurl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    libcurl4-openssl-dev \
+    libgomp1 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the entire directory content
+COPY . .
+
+# Set CUDA stubs path to allow linking against libcuda.so inside docker build
+ENV LIBRARY_PATH=/usr/local/cuda/lib64/stubs:$LIBRARY_PATH
+
+# Run cmake with the exact requested flags for Blackwell architecture and optimizations
+RUN cmake -B build \
+    -DGGML_CUDA=ON \
+    -DCMAKE_CUDA_ARCHITECTURES="120" \
+    -DGGML_NATIVE=ON \
+    -DGGML_CURL=ON \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CUDA_FLAGS="-O3 -use_fast_math" \
+    -DCMAKE_EXE_LINKER_FLAGS="-Wl,--allow-shlib-undefined"
+
+# Compile llama-server, llama-cli, and other targets
+RUN cmake --build build --config Release -j$(nproc) && \
+    mkdir -p /app/lib && \
+    find build -name "*.so" -exec cp {} /app/lib \;
+
+# Stage 2: Runtime
+FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu24.04 AS runtime
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime dependencies (libgomp, curl, ca-certificates for networking/downloading models)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the compiled binaries and shared libraries from build stage
+COPY --from=build /app/build/bin/llama-server /app/llama-server
+COPY --from=build /app/build/bin/llama-cli /app/llama-cli
+COPY --from=build /app/lib /app/lib
+
+# Set the library path to locate libmtmd.so, libllama.so, libggml.so
+ENV LD_LIBRARY_PATH=/app/lib:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+# Expose the default llama-server port
+EXPOSE 8080
+
+# Default environment variables for the server
+ENV LLAMA_ARG_HOST=0.0.0.0
+ENV LLAMA_ARG_PORT=8080
+
+# Run llama-server by default
+ENTRYPOINT ["/app/llama-server"]
