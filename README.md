@@ -4,6 +4,7 @@
 This repository contains a custom Docker setup optimized for running the Qwen 27B model on an NVIDIA RTX GPU with 16GB of VRAM and CUDA 12.8.
 
 ### Customizations:
+- **NVIDIA Driver**: Optimized for and tested on driver version `595.71.05`.
 - **CUDA 12.8**: Built with CUDA 12.8 for optimal compatibility and performance on newer architectures (like Blackwell).
 - **Disabled CUDA Graphs**: `GGML_CUDA_DISABLE_GRAPHS=1` environment variable set to prevent GPU driver (TDR) timeouts during long context processing.
 - **Disabled Context Checkpoints**: Added `--ctx-checkpoints 0` to avoid massive KV cache memory shifting.
